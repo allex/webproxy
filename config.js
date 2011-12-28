@@ -1,18 +1,14 @@
-/*
-** Peteris Krumins (peter@catonmat.net)
-** http://www.catonmat.net  --  good coders code, great reuse
-**
-** A simple proxy server written in node.js.
-**
-*/
+var DIR = __dirname;
 
 var config = {
-  allow_ip_list: './config/allow_ip_list',
-  black_list:    './config/black_list',
-  host_filters:   './config/hostfilters.js',
-  listen:[{ip:'0.0.0.0', port:80},//all ipv4 interfaces
-          {ip:'::', port:80}]//all ipv6 interfaces
+    allow_ip_list:  DIR + '/config/allow_ip_list',
+    black_list:     DIR + '/config/black_list',
+    host_filters:   DIR + '/config/host_filters',
+    responder_list: DIR + '/config/responder_list',
+    listen: {
+        http : {host: '0.0.0.0', port: 8581},
+        https: {host: '0.0.0.0', port: 8582}
+    }
 };
 
 exports.config = config;
-
