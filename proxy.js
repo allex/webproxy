@@ -52,7 +52,6 @@ var rEscRegExp = /([-.*+?^${}()|[\]\/\\])/g;
 function escapeRegExp(s) {
     return String(s).replace(rEscRegExp, '\\$1');
 }
-
 function wildcardToRegex(pattern, flag) {
     return new RegExp('^' + escapeRegExp(pattern).replace(/\\\*/g, '.*').replace(/\\\?/g, '.')
             .replace(/\\\(\.\*\\\)/g, '(.*)') + '$', flag);
@@ -61,7 +60,6 @@ function wildcardToRegex(pattern, flag) {
 function clone(o) {
     return JSON.parse(JSON.stringify(o));
 }
-
 function js_beautify(source) {
     return beautify.js_beautify(unpack(source));
 }
@@ -80,15 +78,12 @@ function encode_host(host) {
 }
 
 /** PAC helper functions {{{ */
-
 function dnsDomainIs(host, domain) {
     return (host.length >= domain.length && host.substring(host.length - domain.length) == domain);
 }
-
 function isPlainHostName(host) {
     return (host.search('\\.') == -1);
 }
-
 function convert_addr(ipchars) {
     var bytes = ipchars.split('.');
     return ((bytes[0] & 0xff) << 24) |
@@ -96,7 +91,6 @@ function convert_addr(ipchars) {
         ((bytes[2] & 0xff) <<  8) |
         (bytes[3] & 0xff);
 }
-
 function isInNet(ipaddr, pattern, maskstr) {
     var test = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ipaddr);
     if (test[1] > 255 || test[2] > 255 ||
@@ -108,18 +102,15 @@ function isInNet(ipaddr, pattern, maskstr) {
     var mask = convert_addr(maskstr);
     return ((host & mask) == (pat & mask));
 }
-
 function localHostOrDomainIs(host, hostdom) {
     return (host == hostdom) || (hostdom.lastIndexOf(host + '.', 0) == 0);
 }
-
 function shExpMatch(url, pattern) {
     pattern = pattern.replace(/\./g, '\\.');
     pattern = pattern.replace(/\*/g, '.*');
     pattern = pattern.replace(/\?/g, '.');
     return new RegExp('^' + pattern + '$').test(url);
 }
-
 /** PAC helper functions (end) }}} */
 
 // config files loaders/updaters
@@ -235,7 +226,6 @@ function ip_allowed(ip) {
         return ip === ip_;
     }) || iplist.length < 1;
 }
-
 function host_allowed(host) {
     return !blacklist.some(function(host_) {
         return host_.test(host);
@@ -343,26 +333,22 @@ function prevent_loop(request, response) {
         return request;
     }
 }
-
 function action_authenticate(response, msg) {
     response.writeHead(401, {
         'WWW-Authenticate': 'Basic realm="' + msg + '"'
     });
     response.end();
 }
-
 function action_deny(response, msg) {
     response.writeHead(403);
     response.write(msg);
     response.end();
 }
-
 function action_notfound(response, msg) {
     response.writeHead(404);
     response.write(msg);
     response.end();
 }
-
 function action_redirect(response, host) {
     log('Redirecting to ' + host);
     if (!/^https?:\/\//i.test(host)) {
@@ -373,16 +359,14 @@ function action_redirect(response, host) {
 }
 
 function action_responder(config, req, res) {
-    var file = config.dist, url = req.url, contentType = mime.lookup(getExt(url) || getExt(file));
-
-    if (contentType) {
-        res.setHeader('Content-Type',  contentType);
-    }
+    var file = config.dist, url = req.url;
 
     if (!config.redirect) {
         // responder with local files.
         fs.stat(file, function(err, stats) {
             if (!err) {
+                var contentType = mime.lookup(getExt(file) || getExt(url));
+                res.setHeader('Content-Type',  contentType);
                 fs.readFile(file, function(err, data) {
                     log('Respond ' + url + ' ==> ' + file);
                     res.write(data, 'utf8');
@@ -398,6 +382,7 @@ function action_responder(config, req, res) {
         // responder with remote redirect url.
         request(file, function(err, response, body) {
             if (!err && response.statusCode === 200) {
+                res.writeHead(response.statusCode, response.headers);
                 log('Respond ' + url + ' ==> ' + file);
                 res.write(body, 'utf8');
                 res.end();
@@ -461,11 +446,10 @@ function action_proxy(response, request, host, port) {// {{{
         } else {
             var rewrite = /^js$/i.test(filetype), decodeEnabled = headers['content-encoding'] === 'gzip';
             if (rewrite) {
-                delete headers['content-encoding'];
-                delete headers['content-length'];
-
                 // buffer connector
                 buffer = new BufferHelper();
+                delete headers['content-encoding'];
+                delete headers['content-length'];
             }
 
             // send headers as received
