@@ -1,0 +1,51 @@
+# set ft=conf tw=200
+
+# ============================================
+# AutoResponder Configration
+# prefix (regex/wildcard/exact)
+# @author: Allex Wang (allex.wxn@gmail.com)
+# ============================================
+
+#
+# web debug
+#
+regex:http://mimg\.127\.net/p/js5/5.0.0b1209111316/js/(p0.js|p1.js) /home/allex/Desktop/proxy/163/v5/$1
+# wildcard:http://i.sso.sina.com.cn/js/ssologin.js(*) /home/allex/Desktop/proxy/sina/ssologin_rsa.js
+
+#
+# padmail hosts
+#
+wildcard:(*)/rny/padmail/js/(*) http://m.sinaimg.cn/rny/padmail/js/$2
+wildcard:(*)/rny/padmail/css/(*) /var/padmail/style/css/$2
+wildcard:(*)/rny/padmail/images/(*) /var/padmail/style/images/$2
+wildcard:(*)/mail.sina.com.cn/padmail/images/(*) /var/padmail/style/images/$2
+
+wildcard:(*).sina.com.cn/m/index.php(*) http://m.sinaimg.cn/login_pad.php$2
+wildcard:(*).sina.com.cn/m/index_smart.php(*) http://m.sinaimg.cn/login_smart.php$2
+
+wildcard:(*).sina.com.cn/p/index.php(*) http://m.sinaimg.cn/index.html$2
+# wildcard:(*)/mobile/offline.manifest(*) http://m.sinaimg.cn/offline.manifest$2
+wildcard:(*)m0.mail.sina.com.cn/mobile/index.php?debug(*) http://m.sinaimg.cn/index.html
+
+# wildcard:(*)/glfx.js/glfx.js http://local/dev/webgl-filter/glfx.js/glfx.js
+# wildcard:(*)/zepto.js(*) http://zeptojs.com/zepto.js
+# wildcard:(*)/padmail/images/icon_touch.png /home/allex/03.png
+
+#
+# padblog
+#
+wildcard:(*)http://m.blog.sina.com.cn/login.php http://sjs.cn/view/login.php
+wildcard:(*)http://m.blog.sina.com.cn/css/ipad/(*) /var/padblog/assets/css/ipad/$2
+wildcard:(*)http://m.blog.sina.com.cn/images/ipad/(*) /var/padblog/assets/images/ipad/$2
+wildcard:(*)sjs.sinajs.cn/padblog/(*) http://sjs.cn/padblog/$2
+wildcard:(*)sjs.sinajs.cn/view/(*) http://sjs.cn/view/$2
+
+wildcard:(*)simg.sinajs.cn/blog7style/css/ipad/(*) /var/padblog/assets/css/ipad/$2
+wildcard:(*)simg.sinajs.cn/blog7style/images/ipad/(*) /var/padblog/assets/images/ipad/$2
+
+wildcard:(*)http://sjs.sinajs.cn/blogh5/(*) http://10.210.74.126/blogh5/$2
+wildcard:(*)http://simg.sinajs.cn/blogh5/(*) http://10.210.74.126/blogh5/$2
+
+# test
+wildcard:(*)/sea.js http://local/dev/vendor/more/amd/seajs/dist/sea-debug.js
+

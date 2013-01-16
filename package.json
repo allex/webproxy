@@ -1,0 +1,27 @@
+{
+  "name": "webproxy",
+  "description": "A HTTP(S) reverse proxy server written in node. with features for web develop",
+  "version": "1.0.0",
+  "author": {
+    "name": "Allex Wang",
+    "email": "allex.wxn@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/allex/webproxy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/allex/webproxy/issues"
+  },
+  "engines": [
+    "node >= 0.3.6"
+  ],
+  "main": "./index.js",
+  "dependencies": {
+    "buffertools": "1.1.x",
+    "mime": "1.2.x"
+  },
+  "bundleDependencies": [
+  ],
+  "readmeFilename": "README.md"
+}

@@ -1,34 +1,41 @@
-/* vim: set tw=85 sw=4: */
-
 /**
- * A simple proxy server written in node.js, Auto responder local files for web develop)
+ * A simple proxy server written in node.js for web develop primary on mobile web
+ * development.
+ *
  * @author Allex (allex.wxn@gmail.com)
+ *
+ * Extends:
+ *  Auto responder local files for web develop.
+ *  beautify js code if needed.
+ *  Fix request 302 redirect problem. see also https://github.com/mikeal/request/
  */
+
+'use strict';
+
+(function(require, exports, module) {
 
 var http     = require('http'),
     util     = require('util'),
     fs       = require('fs'),
     url      = require('url'),
     colors   = require('colors'),
-    argv     = require('optimist').argv,
     zlib     = require('zlib'),
-    unpack   = require('unpack').unpack,
-    beautify = require('beautify'),
     mime     = require('mime'),
     request  = require('request'),
 
-    blacklist       = [],
-    iplist          = [],
-    hostfilters     = {},
-    responderlist   = [],
+    WritableBufferStream = require('buffertools').WritableBufferStream,
+    unpack = require('unpack').unpack,
+    js_beautify = require('beautify'),
 
-    BufferHelper    = require('./bufferhelper'),
-    config          = require('./config').config
+    blacklist     = [],
+    iplist        = [],
+    responderlist = [],
+    hostfilters   = {}
 ;
 
-var DEBUG = argv.debug || argv.d;
-
 function log(s) { util.log(s); }
+function error(e) { util.puts((e && e.message || e || 'undefined').red); }
+function dump(s) { util.puts(JSON.stringify(s).green); }
 
 // removing c-styled comments using javascript
 function removeComments(str) {
@@ -39,13 +46,23 @@ function removeComments(str) {
     return str;
 }
 
-function getExt(path) {
-    var i = path.indexOf('?');
+// get file extension by url string
+function getExtension(url) {
+    var i = url.indexOf('?');
     if (i !== -1) {
-        path = path.substring(0, i);
+        url = url.substring(0, i);
     }
-    i = path.lastIndexOf('.');
-    return (i < 0) ? '' : path.substr(i + 1);
+    i = url.lastIndexOf('.');
+    return (i < 0) ? '' : url.substr(i + 1);
+}
+
+var rPlainExt = /^(html|js|css|txt|json)$/;
+function isBinary(ext) {
+    return !rPlainExt.test(ext);
+}
+
+function isGzip(response) {
+    return response.headers['content-encoding'] === 'gzip';
 }
 
 var rEscRegExp = /([-.*+?^${}()|[\]\/\\])/g;
@@ -57,11 +74,48 @@ function wildcardToRegex(pattern, flag) {
             .replace(/\\\(\.\*\\\)/g, '(.*)') + '$', flag);
 }
 
-function clone(o) {
-    return JSON.parse(JSON.stringify(o));
+var hasOwn = Object.prototype.hasOwnProperty;
+function hasProp(obj, prop) {
+    return hasOwn.call(obj, prop);
 }
-function js_beautify(source) {
-    return beautify.js_beautify(unpack(source));
+
+function getOwn(obj, prop) {
+    return hasProp(obj, prop) && obj[prop];
+}
+
+function clone(o) {
+    var newObj = Array.isArray(o) ? [] : {};
+    for (var i in o) {
+        if (o[i] && typeof o[i] === 'object') {
+            newObj[i] = clone(o[i]);
+        } else newObj[i] = o[i];
+    }
+    return newObj;
+}
+
+function extract(source, whitelist) {
+    var o = {};
+    whitelist.forEach(function(prop, i) {
+        var k = prop[0], v = source[k];
+        o[k] = v === undefined ? prop[1] : v;
+    });
+    return o;
+}
+
+function beautify(source) {
+    source = source.toString();
+    return js_beautify.js_beautify(unpack(source));
+}
+
+var RE_STRICT = /\s*(['"])use strict\1;/g;
+
+// strip "use strict";
+function stripStrict(source) {
+    return source.replace(RE_STRICT, '');
+}
+
+function isLocalRequest(req) {
+    return req.connection.remoteAddress === '127.0.0.1';
 }
 
 // decode host and port info from header
@@ -69,7 +123,7 @@ function decode_host(host) {
     var out = {};
     host = host.split(':');
     out.host = host[0];
-    out.port = host[1] || 80;
+    out.port = host[1] || '80';
     return out;
 }
 // encode host field
@@ -77,12 +131,12 @@ function encode_host(host) {
     return host.host + ((host.port == 80) ? '' : ':' + host.port);
 }
 
-/** PAC helper functions {{{ */
+// pac functions {{{
 function dnsDomainIs(host, domain) {
-    return (host.length >= domain.length && host.substring(host.length - domain.length) == domain);
+    return (host.length >= domain.length && host.substring(host.length - domain.length) === domain);
 }
 function isPlainHostName(host) {
-    return (host.search('\\.') == -1);
+    return (host.search('\\.') === -1);
 }
 function convert_addr(ipchars) {
     var bytes = ipchars.split('.');
@@ -109,132 +163,49 @@ function shExpMatch(url, pattern) {
     pattern = pattern.replace(/\./g, '\\.');
     pattern = pattern.replace(/\*/g, '.*');
     pattern = pattern.replace(/\?/g, '.');
-    return new RegExp('^' + pattern + '$').test(url);
+    var regexp = new RegExp('^' + pattern + '$');
+    return regexp.test(url);
 }
-/** PAC helper functions (end) }}} */
-
-// config files loaders/updaters
-function update_list(msg, file, lineParser, resultHandler) {
-    fs.stat(file, function(err, stats) {
-        if (!err) {
-            log(msg);
-            fs.readFile(file, function(err, data) {
-                resultHandler(data.toString().split('\n').filter(function(line) {
-                    return line.length && line.charAt(0) !== '#';
-                }).map(lineParser));
-            });
-        } else {
-            if (DEBUG) {
-                log('File \'' + file + '\' was not found.');
-            }
-            resultHandler([]);
-        }
-    });
-}
-function update_hostfilters() {
-    file = config.host_filters;
-    fs.stat(file, function(err, stats) {
-        if (!err) {
-            util.log('Updating host filter');
-            fs.readFile(file, function(err, data) {
-                hostfilters = JSON.parse(removeComments(data.toString()));
-            });
-        } else {
-            DEBUG && log('File \'' + file + '\' was not found.');
-            hostfilters = {};
-        }
-    });
-}
-function update_blacklist() {
-    update_list('Updating host black list.', config.black_list, function(rx) {
-        return RegExp(rx);
-    }, function(list) { blacklist = list; });
-}
-function update_iplist() {
-    update_list('Updating allowed ip list.', config.allow_ip_list, function(ip) {
-        return ip;
-    }, function(list) { iplist = list; });
-}
-function update_responderlist() {
-    update_list('Updating host routers.', config.responder_list, function(line) {
-        var type, src, pairs, role, pos = line.indexOf(':');
-        if (pos !== -1) {
-            type = line.substring(0, pos);
-            line = line.substring(pos + 1);
-            pairs = line.split(' ');
-            src = pairs[0];
-            dist = pairs[1];
-            if (type === 'regex') {
-                src = new RegExp(src, 'i');
-            } else {
-                if (type === 'wildcard') {
-                    type = 'regex';
-                    src = wildcardToRegex(src, 'ig');
-                }
-            }
-            role = {type: type, src: src, dist: dist};
-            if (/^https?:\/\//.test(dist)) {
-                role.redirect = true;
-            }
-            return role;
-        }
-        return {};
-    },
-    function(list) {
-        responderlist = list;
-    });
-}
+// }}}
 
 function route_match(url) {
     var list = responderlist, l = list.length, item, src, dist, m;
-
     while (l--) {
         if (item = list[l]) {
             src = item.src;
-
-            // replace with regex
-            if (item.type === 'regex') {
+            if (item.type === 'regex') { // replace with regex
                 src.lastIndex = 0;
                 if (m = src.test(url)) {
                     dist = item.dist;
                     dist = url.replace(src, dist);
-
                     // local file responder.
                     if (!item.redirect) {
-                        // strip params from local file path.
-                        dist = dist.replace(/[?#].*$/, '');
+                        dist = dist.replace(/[?#].*$/, ''); // strip params from local file path.
                     }
-
                     item = clone(item);
                     item.dist = dist;
                     return item;
                 }
-            } else {
-                if (src === url) {
-                    return clone(item);
-                }
+            }
+            else {
+                if (src === url) return clone(item);
             }
         }
     }
-
     return null;
 }
 
 // filtering rules
 function ip_allowed(ip) {
-    return iplist.some(function(ip_) {
-        return ip === ip_;
-    }) || iplist.length < 1;
+    return !iplist.length || iplist.some(function(k) { return ip === k; });
 }
 function host_allowed(host) {
-    return !blacklist.some(function(host_) {
-        return host_.test(host);
-    });
+    return !blacklist.some(function(k) { return k.test(host); });
 }
 
 // header decoding
 function authenticate(request) {
-    var token = {'login': 'anonymous', 'pass': ''};
+    var token = {'login': 'anonymous', 'pass': ''}, basic;
     if (request.headers.authorization && request.headers.authorization.search('Basic ') === 0) {
         // fetch login and password
         basic = (new Buffer(request.headers.authorization.split(' ')[1], 'base64').toString());
@@ -274,81 +245,80 @@ function handle_proxy_rule(rule, target, token) {
     return target;
 }
 
+function findRoute(types) {
+    for (var mappings = hostfilters, i = -1, l = types.length, v; ++i < l; ) {
+        v = getOwn(mappings, types[i]);
+        if (v) return v;
+    }
+    return null;
+}
+
 function handle_proxy_route(host, url, token) {
     // extract target host and port
-    var action = decode_host(host), key, rule, mappings = hostfilters;
+    var conf = decode_host(host),
+        domain = conf.host,
+        port = conf.port,
+        rule,
+        mappings = hostfilters;
 
-    action.action = 'proxyto';
-
-    // rule of the form "foo.domain.tld:port"
-    key = action.host + ':' + action.port;
-    if (key in mappings) {
-        rule = mappings[key];
-    } else {
-
-        // rule of the form "foo.domain.tld"
-        if (action.host in mappings) {
-            rule = mappings[action.host];
-        }
-
-        // rule of the form "*:port"
-        key = '*:' + action.port;
-        if (key in mappings) {
-            rule = mappings[key];
-        }
-
-        // default rule "*"
-        key = '*';
-        if (key in mappings) {
-            rule = mappings[key];
-        }
-
-        // dnsDomainIs or shExpMatch
-        for (key in mappings) {
-            if (mappings.hasOwnProperty(key)) {
-                if (dnsDomainIs(host, key.split(':')[0]) || shExpMatch(url, key.split(':')[0])) {
-                    rule = mappings[key];
-                    break;
-                }
+    // dnsDomainIs or shExpMatch
+    for (var key in mappings) {
+        if (hasProp(mappings, key)) {
+            var hostname = key.split(':')[0];
+            if (dnsDomainIs(host, hostname) || shExpMatch(url, key)) {
+                rule = mappings[key];
+                break;
             }
         }
     }
 
-    if (rule) {
-        action = handle_proxy_rule(rule, action, token);
+    if (!rule) {
+        rule = findRoute([host, domain, '*:' + port, '*']);
     }
 
-    return action;
+    conf.action = 'proxyto';
+    if (rule) {
+        conf = handle_proxy_rule(rule, conf, token);
+    }
+
+    return conf;
 }
 
 function prevent_loop(request, response) {
     if (request.headers.proxy === 'node.jtlebi') { // if request is already tooted => loop
-        log('Loop detected');
+        error('Loop detected');
         response.writeHead(500);
         response.write('Proxy loop !');
         response.end();
         return false;
-    } else { // append a tattoo to it
+    } else {
+        // append a tattoo to prevent dead proxies.
         request.headers.proxy = 'node.jtlebi';
         return request;
     }
 }
+
 function action_authenticate(response, msg) {
     response.writeHead(401, {
         'WWW-Authenticate': 'Basic realm="' + msg + '"'
     });
     response.end();
 }
+
 function action_deny(response, msg) {
+    error(msg);
     response.writeHead(403);
     response.write(msg);
     response.end();
 }
+
 function action_notfound(response, msg) {
+    error(msg);
     response.writeHead(404);
     response.write(msg);
     response.end();
 }
+
 function action_redirect(response, host) {
     log('Redirecting to ' + host);
     if (!/^https?:\/\//i.test(host)) {
@@ -358,146 +328,160 @@ function action_redirect(response, host) {
     response.end();
 }
 
-function action_responder(config, req, res) {
+function action_responder(config, req, resp) {
     var file = config.dist, url = req.url;
-
     if (!config.redirect) {
         // responder with local files.
         fs.stat(file, function(err, stats) {
             if (!err) {
-                var contentType = mime.lookup(getExt(file) || getExt(url));
-                res.setHeader('Content-Type',  contentType);
+                var extension = getExtension(file) || getExtension(url);
+                resp.setHeader('Content-Type',  mime.lookup(extension));
                 fs.readFile(file, function(err, data) {
-                    log('Respond ' + url + ' ==> ' + file);
-                    res.write(data, 'utf8');
-                    res.end();
+                    var buffer = processBuffer(data, extension);
+                    resp.end(data, 'binary');
+                });
+            } else { action_notfound(resp, 'File "' + file + '" was not found.'); }
+        });
+    }
+    else {
+        // responder with remote redirect url.
+        var x = get(file, resp, req);
+        x.on('error', function(err) {
+            action_notfound(resp, err.message);
+        });
+        req.on('end', function() { x.end(); });
+    }
+}
+
+/**
+ * @param {Object} options The options info, include proxy properties if manally.
+ * @param {Respond} response
+ * @param {Request} request
+ */
+function get(uri, resp, req) {
+    var req = request(uri);
+    req.on('response', function(response) {
+        resp.setHeader('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
+        forwardResponse(req.req, response, resp);
+    });
+    return req;
+}
+
+function sendRequest(options, request, response) {
+    delete options.headers['proxy-connection'];
+
+    // launch new request
+    // http://nodejs.org/api/http.html#http_http_request_options_callback
+    var req = http.request(options);
+
+    // proxies to SEND request to real server
+    request.on('data', function(chunk) { req.write(chunk, 'binary'); });
+    request.on('end', function() { req.end(); });
+
+    // proxies to FORWARD answer to real client
+    req.on('response', function(resp) {
+        forwardResponse(req, resp, response);
+    });
+
+    return req;
+}
+
+function forwardResponse(request, sResponse, rResponse) {
+    var headers = sResponse.headers,
+        legacyHTTP = request.httpVersionMajor === 1 && request.httpVersionMinor < 1 || request.httpVersionMajor < 1,
+        extension = getExtension(request.path) || mime.extension(headers['content-type']);
+
+    // simple forward for binary response.
+    if (isBinary(extension)) {
+        rResponse.writeHead(sResponse.statusCode, headers);
+        sResponse.on('data', function(chunk) { rResponse.write(chunk, 'binary'); });
+        sResponse.on('end', function() { rResponse.end(); });
+    }
+    else {
+        var stream = new WritableBufferStream(),
+            gziped = isGzip(sResponse),
+            onEnd = function(buffer) {
+                buffer = processBuffer(buffer, extension);
+                if (gziped) {
+                    delete headers['content-encoding'];
+                }
+                headers['content-length'] = buffer.length; // cancel transfer encoding 'chunked'
+                rResponse.writeHead(sResponse.statusCode, headers);
+                rResponse.end(buffer, 'binary');
+            };
+
+        sResponse.on('data', function(chunk) {
+            stream.write(chunk);
+        });
+        sResponse.on('end', function() {
+            var buffer = stream.getBuffer();
+            if (gziped) {
+                // unGzip
+                zlib.gunzip(buffer, function(err, buffer) {
+                    onEnd(buffer);
                 });
             } else {
-                var msg = 'File \'' + file + '\' was not found.';
-                log(msg);
-                action_notfound(res, msg);
-            }
-        });
-    } else {
-        // responder with remote redirect url.
-        request(file, function(err, response, body) {
-            if (!err && response.statusCode === 200) {
-                res.writeHead(response.statusCode, response.headers);
-                log('Respond ' + url + ' ==> ' + file);
-                res.write(body, 'utf8');
-                res.end();
-            } else {
-                log(err);
-                action_notfound(res, err);
+                onEnd(buffer);
             }
         });
     }
 }
 
-function action_proxy(response, request, host, port) {// {{{
-    var path = request.url, options = url.parse(path);
+/**
+ * Process buffer object.
+ *
+ * @param {Buffer} buffer The buffer to process.
+ * @param {String} extension The file extension of the buffer content.
+ */
+function processBuffer(buffer, extension, encoding) {
+    var str;
+    if (argv.weinre) {
+        str = buffer.toString(encoding || 'utf8').trim();
+        if (extension === 'html' && str.charAt(0) !== '<') {
+            extension = 'js';
+        }
+        if (extension === 'html') {
+            str += '\n<script src="http://192.168.0.2:8080/target/target-script-min.js#anonymous"></script>';
+        } else {
+            if (extension === 'js') {
+                str = stripStrict(str);
+            }
+        }
+    }
+    if (argv.beautify && extension === 'js') {
+        str = beautify(str || buffer.toString());
+    }
+    return str ? new Buffer(str) : buffer;
+}
+
+function action_proxy(response, request, host, port) {
+    var reqUrl = request.url, options = url.parse(reqUrl);
 
     options.method = request.method;
     options.headers = request.headers;
     options.agent = false;
 
     // optional set proxy server
-    if (options.hostname !== host) {
+    var proxy = options.hostname !== host;
+    if (proxy) {
+        log('Proxy: ' + 'http://' + host + ':' + port);
         options.host = host;
         options.port = port;
-        options.path = path;
+        options.path = reqUrl;
+        delete options.hostname;
     }
 
-    // launch new request
-    // http://nodejs.org/api/http.html#http_http_request_options_callback
-    var proxy_request = http.request(options);
-
+    var x = sendRequest(options, request, response);
     // deal with errors, timeout, con refused, ...
-    proxy_request.on('error', function(err) {
-        log(err.toString() + ' on request to ' + host + ':' + port);
-        return action_notfound(response, 'Requested resource (' + path + ') is not accessible on host "' + host + ':' + port + '"');
+    x.on('error', function(err) {
+        action_notfound(response, 'Requested resource (' + reqUrl + ') is not accessible on host "' + host + ':' + port + '"');
     });
-
-    // detect HTTP version
-    var legacy_http = request.httpVersionMajor == 1 && request.httpVersionMinor < 1 || request.httpVersionMajor < 1;
-
-    // proxies to FORWARD answer to real client
-    proxy_request.on('response', function(proxy_response) {
-        var buffer, filetype = getExt(path), headers = proxy_response.headers;
-
-        if (legacy_http && headers['transfer-encoding'] != undefined) {
-            log('legacy HTTP: ' + request.httpVersion);
-
-            buffer = new BufferHelper();
-
-            // filter headers
-            delete headers['transfer-encoding'];
-
-            // buffer answer
-            proxy_response.on('data', function(chunk) {
-                buffer.concat(chunk);
-            });
-            proxy_response.on('end', function() {
-                headers['Content-length'] = buffer.length; // cancel transfer encoding 'chunked'
-                response.writeHead(proxy_response.statusCode, headers);
-                response.end(buffer, 'binary');
-            });
-
-        } else {
-            var rewrite = /^js$/i.test(filetype), decodeEnabled = headers['content-encoding'] === 'gzip';
-            if (rewrite) {
-                // buffer connector
-                buffer = new BufferHelper();
-                delete headers['content-encoding'];
-                delete headers['content-length'];
-            }
-
-            // send headers as received
-            response.writeHead(proxy_response.statusCode, proxy_response.headers);
-
-            proxy_response.on('data', function(chunk) {
-                if (rewrite) {
-                    buffer.concat(chunk);
-                } else {
-                    // simple data forward
-                    response.write(chunk, 'binary');
-                }
-            });
-            proxy_response.on('end', function() {
-                if (rewrite) {
-                    if (decodeEnabled) {
-                        buffer = buffer.toBuffer();
-                        zlib.gunzip(buffer, function(err, buffer) {
-                            response.end(js_beautify(buffer.toString()));
-                        });
-                    } else {
-                        var s = js_beautify(buffer.toString());
-                        response.end(s);
-                    }
-                    buffer = null;
-                } else {
-                    response.end();
-                }
-            });
-        }
-    });
-
-    // proxies to SEND request to real server
-    request.on('data', function(chunk) {
-        proxy_request.write(chunk, 'binary');
-    });
-
-    request.on('end', function() {
-        proxy_request.end();
-    });
-
-}// }}}
+}
 
 // special security logging function
 function security_log(request, response, msg) {
     var ip = request.connection.remoteAddress;
-    msg = '**SECURITY VIOLATION**, ' + ip + ',' + request.method || '' + ' ' + request.url || '' + ',' + msg;
-    log(msg);
+    log('**SECURITY VIOLATION**, ' + ip + ',' + request.method || '' + ' ' + request.url || '' + ',' + msg);
 }
 
 // security filter
@@ -514,89 +498,181 @@ function security_filter(request, response) {
 
 // actual server loop
 function server_cb(request, response) {
-
     // the *very* first action here is to handle security conditions
     // all related actions including logging are done by specialized functions
     // to ensure compartimentation
     if (!security_filter(request, response)) return;
 
-    var ip = request.connection.remoteAddress;
+    var ip = request.connection.remoteAddress, msg;
     if (!ip_allowed(ip)) {
-        msg = 'IP ' + ip + ' is not allowed to use this proxy';
-        action_deny(response, msg);
-        log(msg);
+        action_deny(response, 'IP ' + ip + ' is not allowed to use this proxy');
         return;
     }
 
     var url = request.url;
-
     if (!host_allowed(url)) {
-        msg = 'Host ' + url + ' has been denied by proxy configuration';
-        action_deny(response, msg);
-        log(msg);
+        action_deny(response, 'Host ' + url + ' has been denied by proxy configuration');
         return;
     }
 
-    // Check auto responder hosts.
-    var resConfig = route_match(url);
-
-    // handle responder.
-    if (resConfig) {
-        action_responder(resConfig, request, response);
-        return;
+    var conf = route_match(url);
+    if (conf) {
+        // auto responder hosts.
+        stdout(request, 'Location', url + ' -> ' + conf.dist);
+        action_responder(conf, request, response);
     }
-
-    // loop filter
-    request = prevent_loop(request, response);
-    if (!request) {
-        return;
-    }
-
-    // get authorization token
-    authorization = authenticate(request);
-
-    // calc new host info
-    var action = handle_proxy_route(request.headers.host, url, authorization);
-    var host = encode_host(action);
-    var mode = action.action;
-
-    log(ip + ': ' + '[' + mode.charAt(0).toUpperCase() + '] ' + request.method + ' ' + url );
-
-    // handle action
-    if (mode == 'redirect') {
-        action_redirect(response, host);
-    }
-    else if (mode == 'proxyto') {
-        action_proxy(response, request, action.host, action.port);
-    }
-    else if (mode == 'authenticate') {
-        action_authenticate(response, action.msg);
+    else {
+        // handle proxy action
+        request = prevent_loop(request, response);
+        if (request) {
+            var action = handle_proxy_route(request.headers.host, authenticate(request)), mode = action.action;
+            stdout(request, mode);
+            if (mode == 'proxyto') {
+                action_proxy(response, request, action.host, action.port);
+            }
+            else if (mode == 'redirect') {
+                action_redirect(response, encode_host(action));
+            }
+            else if (mode == 'authenticate') {
+                action_authenticate(response, action.msg);
+            }
+        }
     }
 }
 
-if (!DEBUG) {
-    // last chance error handler
-    // it catch the exception preventing the application from crashing.
-    // I recommend to comment it in a development environment as it
-    // "Hides" very interesting bits of debugging informations.
-    process.on('uncaughtException', function (err) {
-        util.puts('Unexcpted Error: '.red + err);
-    });
+var G_COLORS = {
+    'L': 'magenta', // location
+    'R': 'red',     // redirect
+    'P': 'green',   // proxy
+    'A': 'white'    // authenticate
+};
+// console log message to stdout
+function stdout(request, type, message) {
+    var ip = request.connection.remoteAddress, method = request.method, type = type.charAt(0).toUpperCase();
+    type = G_COLORS[type] ? ('[' + type + ']')[G_COLORS[type]] : '[' + type + ']';
+    log([ip.cyan, type, method, (message || request.url)].join(' '));
 }
 
-// config files watchers
-fs.watchFile(config.black_list, function(c, p) { update_blacklist(); });
-fs.watchFile(config.allow_ip_list, function(c, p) { update_iplist(); });
-fs.watchFile(config.host_filters, function(c, p) { update_hostfilters(); });
-fs.watchFile(config.responder_list, function(c, p) { update_responderlist(); });
+/**
+ * @param {Object} cfg The proxy configuration object.
+ */
+function startup(cfg) {
+    function watchConfig(file, updater) {
+        fs.stat(file, function(err, stats) {
+            if (!err) {
+                updater(file);
+                fs.watchFile(file, function(c, p) { updater(file) });
+            } else {
+                DEBUG && error('File \'' + file + '\' was not found.');
+            }
+        });
+    }
 
-// startup
-update_blacklist();
-update_iplist();
-update_hostfilters();
-update_responderlist();
+    // config files loaders/updaters
+    function update_list(msg, file, lineParser, resultHandler) {
+        fs.stat(file, function(err, stats) {
+            if (!err) {
+                log(msg);
+                fs.readFile(file, function(err, data) {
+                    resultHandler(data.toString().split('\n').filter(function(line) {
+                        return line.length && line.charAt(0) !== '#';
+                    }).map(lineParser));
+                });
+            } else {
+                DEBUG && error('File \'' + file + '\' was not found.');
+                resultHandler([]);
+            }
+        });
+    }
 
-// Crete HTTP proxy server
-var cfg = config.listen.http;
-http.createServer(server_cb).listen(cfg.port, cfg.host);
-util.puts('HTTP proxy server' + ' started'.green.bold + ' on ' + (cfg.host + ':' + cfg.port).underline.yellow);
+    function update_hostfilters(file) {
+        fs.stat(file, function(err, stats) {
+            if (!err) {
+                log('Updating host filter');
+                fs.readFile(file, function(err, data) {
+                    hostfilters = JSON.parse(removeComments(data.toString()));
+                });
+            } else {
+                DEBUG && error('File \'' + file + '\' was not found.');
+                hostfilters = {};
+            }
+        });
+    }
+
+    function update_blacklist(file) {
+        update_list('Updating host black list.', file, function(rx) {
+            return RegExp(rx);
+        }, function(list) { blacklist = list; });
+    }
+
+    function update_iplist(file) {
+        update_list('Updating allowed ip list.', file, function(ip) {
+            return ip;
+        }, function(list) { iplist = list; });
+    }
+
+    function update_responderlist(file) {
+        update_list('Updating host routers.', file, function(line) {
+            var type, src, pairs, role, dist, pos = line.indexOf(':');
+            if (pos !== -1) {
+                type = line.substring(0, pos);
+                line = line.substring(pos + 1);
+                pairs = line.split(' ');
+                src = pairs[0];
+                dist = pairs[1];
+                if (type === 'regex') {
+                    src = new RegExp(src, 'i');
+                } else {
+                    if (type === 'wildcard') {
+                        type = 'regex';
+                        src = wildcardToRegex(src, 'ig');
+                    }
+                }
+                role = {type: type, src: src, dist: dist};
+                if (/^https?:\/\//.test(dist)) {
+                    role.redirect = true;
+                }
+                return role;
+            }
+            return {};
+        },
+        function(list) { responderlist = list; });
+    }
+
+    // Initial config files watchers
+    watchConfig(cfg.black_list, update_blacklist);
+    watchConfig(cfg.allow_ip_list, update_iplist);
+    watchConfig(cfg.host_filters, update_hostfilters);
+    watchConfig(cfg.responder_list, update_responderlist);
+
+    // Crete HTTP proxy server
+    var p = cfg.listen.http;
+    http.createServer(server_cb).listen(p.port, p.host);
+
+    console.log('HTTP proxy server started' + ' on ' + (p.host + ':' + p.port).underline.yellow);
+    console.log('OPTIONS:'.green, argv);
+}
+
+var argv = extract(require('optimist').argv, [
+    ['debug'   , 0],
+    ['weinre'  , 0],
+    ['beautify', 0]
+]);
+
+var DEBUG = argv.debug, cfg = require('./config');
+
+// last chance error handler
+// it catch the exception preventing the application from crashing.
+// I recommend to comment it in a development environment as it
+// "Hides" very interesting bits of debugging informations.
+process.on('uncaughtException', function (err) {
+    if (DEBUG) throw err;
+    else error('Unexcpted Error: ' + err);
+});
+
+// startup proxy server
+startup(cfg);
+
+})(require, exports, module);
+
+/* vim: set tw=85 sw=4: */
