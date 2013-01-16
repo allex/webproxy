@@ -8,7 +8,7 @@ Based on the Nodejs-proxy INITIAL commits written by Peteris Krumins (peter@cato
 Author: Allex Wang (allex.wxn@gmail.com)
 </pre>
 
-## Feautures:
+## Features:
 * http(s) request forwarding.
 * weinre debugger. (need weinre installed)
 * javascript code beautify.
