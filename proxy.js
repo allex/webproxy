@@ -315,7 +315,10 @@ function action_deny(response, msg) {
 function action_notfound(response, msg) {
     error(msg);
     response.writeHead(404);
-    response.write(msg);
+    response.write(
+        '<h1>400 Page Not Found</h1>\n' +
+        '<p>' + msg + '</p>'
+    );
     response.end();
 }
 
@@ -389,7 +392,7 @@ function sendRequest(options, request, response) {
 function forwardResponse(request, sResponse, rResponse) {
     var headers = sResponse.headers,
         legacyHTTP = request.httpVersionMajor === 1 && request.httpVersionMinor < 1 || request.httpVersionMajor < 1,
-        extension = getExtension(request.path) || mime.extension(headers['content-type']);
+        extension = mime.extension(headers['content-type']) || getExtension(request.path);
 
     // simple forward for binary response.
     if (isBinary(extension)) {
@@ -617,7 +620,7 @@ function startup(cfg) {
             if (pos !== -1) {
                 type = line.substring(0, pos);
                 line = line.substring(pos + 1);
-                pairs = line.split(' ');
+                pairs = line.split(/\s\s*/);
                 src = pairs[0];
                 dist = pairs[1];
                 if (type === 'regex') {

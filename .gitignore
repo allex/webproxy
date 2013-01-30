@@ -1,4 +1,5 @@
 node_modules
-config/allow_ip_list
-config/black_list
-config/responder_list
+conf.d/allow_ip_list
+conf.d/black_list
+conf.d/responder_list
+t.*
