@@ -6,7 +6,7 @@
  *
  * Extends:
  *  Auto responder local files for web develop.
- *  beautify js code if needed.
+ *  beautify js code if needed (require beautify module).
  *  Fix request 302 redirect problem. see also https://github.com/mikeal/request/
  */
 
@@ -24,8 +24,6 @@ var http     = require('http'),
     request  = require('request'),
 
     WritableBufferStream = require('buffertools').WritableBufferStream,
-    unpack = require('unpack').unpack,
-    js_beautify = require('beautify'),
 
     blacklist     = [],
     iplist        = [],
@@ -136,8 +134,9 @@ function extract(source, whitelist) {
 }
 
 function beautify(source) {
+    var unpack = require('unpack').unpack, js_beautify = require('beautify').js_beautify;
     source = source.toString();
-    return js_beautify.js_beautify(unpack(source));
+    return js_beautify(unpack(source));
 }
 
 var RE_STRICT = /\s*(['"])use strict\1;/g;
@@ -603,7 +602,6 @@ function startup(cfg) {
             }
         });
     }
-
     // config files loaders/updaters
     function update_list(msg, file, lineParser, resultHandler) {
         fs.stat(file, function(err, stats) {
@@ -621,7 +619,8 @@ function startup(cfg) {
         });
     }
 
-    function update_hostfilters(file) {
+    // Initial config file watchers
+    watchConfig(cfg.host_filters, function(file) {
         fs.stat(file, function(err, stats) {
             if (!err) {
                 log('Updating host filter');
@@ -633,21 +632,18 @@ function startup(cfg) {
                 hostfilters = {};
             }
         });
-    }
-
-    function update_blacklist(file) {
+    });
+    watchConfig(cfg.black_list, function(file) {
         update_list('Updating host black list.', file, function(rx) {
             return RegExp(rx);
         }, function(list) { blacklist = list; });
-    }
-
-    function update_iplist(file) {
+    });
+    watchConfig(cfg.allow_ip_list, function(file) {
         update_list('Updating allowed ip list.', file, function(ip) {
             return ip;
         }, function(list) { iplist = list; });
-    }
-
-    function update_responderlist(file) {
+    });
+    watchConfig(cfg.responder_list, function(file) {
         update_list('Updating host routers.', file, function(line) {
             var type, src, pairs, role, dist, pos = line.indexOf(':');
             if (pos !== -1) {
@@ -673,13 +669,7 @@ function startup(cfg) {
             return {};
         },
         function(list) { responderlist = list; });
-    }
-
-    // Initial config files watchers
-    watchConfig(cfg.black_list, update_blacklist);
-    watchConfig(cfg.allow_ip_list, update_iplist);
-    watchConfig(cfg.host_filters, update_hostfilters);
-    watchConfig(cfg.responder_list, update_responderlist);
+    });
 
     // Crete HTTP proxy server
     var p = cfg.listen.http;
