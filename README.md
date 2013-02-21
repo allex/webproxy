@@ -11,7 +11,8 @@ Author: Allex Wang (allex.wxn@gmail.com)
 ## Features:
 * http(s) request forwarding.
 * weinre debugger. (need weinre installed)
-* javascript code beautify.
+* javascript code beautify for codes online.
+* host simulation by some configuration proxy forwardings.
 
 ## Proxy setup
 <pre>
