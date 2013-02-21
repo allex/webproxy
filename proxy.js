@@ -65,13 +65,46 @@ function isGzip(response) {
     return response.headers['content-encoding'] === 'gzip';
 }
 
+var rPattern = /\(([^)]*)\)/;
 var rEscRegExp = /([-.*+?^${}()|[\]\/\\])/g;
+
 function escapeRegExp(s) {
     return String(s).replace(rEscRegExp, '\\$1');
 }
-function wildcardToRegex(pattern, flag) {
-    return new RegExp('^' + escapeRegExp(pattern).replace(/\\\*/g, '.*').replace(/\\\?/g, '.')
+function wildcardToRegex(str, flag) {
+    return new RegExp('^' + escapeRegExp(str).replace(/\\\*/g, '.*').replace(/\\\?/g, '.')
             .replace(/\\\(\.\*\\\)/g, '(.*)') + '$', flag);
+}
+function patternToRegex(str, flag) {
+    var sb = [], m, offset = 0, token;
+
+    while (str) {
+        if (m = str.match(rPattern)) {
+            offset = m.index;
+            sb.push(escapeRegExp(str.slice(0, offset)));
+
+            token = m[1];
+            // fix the specific tokens.
+            if (token.length === 1) {
+                switch (token) {
+                case '*':
+                    token = '.*';
+                    break;
+                case '?':
+                    token = '.?';
+                    break;
+                }
+            }
+            sb.push('(' + token + ')');
+            str = str.slice(offset + m[0].length);
+        } else {
+            sb.push(escapeRegExp(str));
+            str = '';
+        }
+    }
+    str = sb.join('');
+
+    return new RegExp(str, flag);
 }
 
 var hasOwn = Object.prototype.hasOwnProperty;
@@ -628,7 +661,7 @@ function startup(cfg) {
                 } else {
                     if (type === 'wildcard') {
                         type = 'regex';
-                        src = wildcardToRegex(src, 'ig');
+                        src = patternToRegex(src, 'ig');
                     }
                 }
                 role = {type: type, src: src, dist: dist};
