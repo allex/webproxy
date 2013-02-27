@@ -396,7 +396,9 @@ function action_responder(config, req, resp) {
 function get(uri, resp, req) {
     var req = request(uri);
     req.on('response', function(response) {
-        resp.setHeader('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
+        if (argv.nocache) {
+            resp.setHeader('Cache-Control', 'no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0');
+        }
         forwardResponse(req.req, response, resp);
     });
     return req;
@@ -591,7 +593,7 @@ function stdout(request, type, message) {
 /**
  * @param {Object} cfg The proxy configuration object.
  */
-function startup(cfg) {
+function startup(options) {
     function watchConfig(file, updater) {
         fs.stat(file, function(err, stats) {
             if (!err) {
@@ -620,7 +622,7 @@ function startup(cfg) {
     }
 
     // Initial config file watchers
-    watchConfig(cfg.host_filters, function(file) {
+    watchConfig(options.host_filters, function(file) {
         fs.stat(file, function(err, stats) {
             if (!err) {
                 log('Updating host filter');
@@ -633,17 +635,17 @@ function startup(cfg) {
             }
         });
     });
-    watchConfig(cfg.black_list, function(file) {
+    watchConfig(options.black_list, function(file) {
         update_list('Updating host black list.', file, function(rx) {
             return RegExp(rx);
         }, function(list) { blacklist = list; });
     });
-    watchConfig(cfg.allow_ip_list, function(file) {
+    watchConfig(options.allow_ip_list, function(file) {
         update_list('Updating allowed ip list.', file, function(ip) {
             return ip;
         }, function(list) { iplist = list; });
     });
-    watchConfig(cfg.responder_list, function(file) {
+    watchConfig(options.responder_list, function(file) {
         update_list('Updating host routers.', file, function(line) {
             var type, src, pairs, role, dist, pos = line.indexOf(':');
             if (pos !== -1) {
@@ -672,20 +674,22 @@ function startup(cfg) {
     });
 
     // Crete HTTP proxy server
-    var p = cfg.listen.http;
+    var p = options.listen.http;
     http.createServer(server_cb).listen(p.port, p.host);
 
     console.log('HTTP proxy server started' + ' on ' + (p.host + ':' + p.port).underline.yellow);
-    console.log('OPTIONS:'.green, argv);
 }
 
 var argv = extract(require('optimist').argv, [
     ['debug'   , 0],
     ['weinre'  , 0],
-    ['beautify', 0]
+    ['beautify', 0],
+    ['nocache' , 0]
 ]);
 
-var DEBUG = argv.debug, cfg = require('./config');
+var DEBUG = argv.debug;
+
+console.log('OPTIONS:'.green, argv);
 
 // last chance error handler
 // it catch the exception preventing the application from crashing.
@@ -697,8 +701,7 @@ process.on('uncaughtException', function (err) {
 });
 
 // startup proxy server
-startup(cfg);
+startup(require('./config'));
 
 })(require, exports, module);
-
 /* vim: set tw=85 sw=4: */
