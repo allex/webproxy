@@ -2,7 +2,7 @@
  * A simple proxy server written in node.js for web develop primary on mobile web
  * development.
  *
- * @author Allex (allex.wxn@gmail.com)
+ * @author Allex Wang (allex.wxn@gmail.com)
  *
  * Extends:
  *  Auto responder local files for web develop.
@@ -689,16 +689,17 @@ var argv = extract(require('optimist').argv, [
 
 var DEBUG = argv.debug;
 
-console.log('OPTIONS:'.green, argv);
+if (!DEBUG) {
+    // last chance error handler
+    // it catch the exception preventing the application from crashing.
+    // I recommend to comment it in a development environment as it
+    // "Hides" very interesting bits of debugging informations.
+    process.on('uncaughtException', function (err) {
+        error('Unexcpted Error: ' + err);
+    });
+}
 
-// last chance error handler
-// it catch the exception preventing the application from crashing.
-// I recommend to comment it in a development environment as it
-// "Hides" very interesting bits of debugging informations.
-process.on('uncaughtException', function (err) {
-    if (DEBUG) throw err;
-    else error('Unexcpted Error: ' + err);
-});
+console.log('OPTIONS:'.green, argv);
 
 // startup proxy server
 startup(require('./config'));
