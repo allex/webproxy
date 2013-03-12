@@ -18,7 +18,7 @@ Author: Allex Wang (allex.wxn@gmail.com)
 <pre>
 cd ~/local/
 git clone git://github.com/allex/webproxy.git webproxy
-node ./webproxy/proxy.js [--weinre | --beautify]
+node ./webproxy/proxy.js [--weinre | --beautify | --nocache | --debug]
 </pre>
 
 ## TODO:
