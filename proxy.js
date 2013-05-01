@@ -365,7 +365,17 @@ function action_redirect(response, host) {
 
 function action_responder(config, req, resp) {
     var file = config.dist, url = req.url;
-    if (!config.redirect) {
+
+    // Forward remote url resources.
+    if (file.indexOf('//') === 0 || /^https?:\/\//.test(file)) {
+        // responder with remote redirect url.
+        var x = get(file, resp, req);
+        x.on('error', function(err) {
+            action_notfound(resp, err.message);
+        });
+        req.on('end', function() { x.end(); });
+    }
+    else {
         // responder with local files.
         fs.stat(file, function(err, stats) {
             if (!err) {
@@ -377,14 +387,6 @@ function action_responder(config, req, resp) {
                 });
             } else { action_notfound(resp, 'File "' + file + '" was not found.'); }
         });
-    }
-    else {
-        // responder with remote redirect url.
-        var x = get(file, resp, req);
-        x.on('error', function(err) {
-            action_notfound(resp, err.message);
-        });
-        req.on('end', function() { x.end(); });
     }
 }
 
@@ -478,7 +480,7 @@ function processBuffer(buffer, extension, encoding) {
             extension = 'js';
         }
         if (extension === 'html') {
-            str += '\n<script src="http://192.168.0.2:8080/target/target-script-min.js#anonymous"></script>';
+            str += '\n<script src="http://192.168.1.2:8080/target/target-script-min.js#anonymous"></script>';
         } else {
             if (extension === 'js') {
                 str = stripStrict(str);
@@ -583,11 +585,17 @@ var G_COLORS = {
     'P': 'green',   // proxy
     'A': 'white'    // authenticate
 };
+
 // console log message to stdout
 function stdout(request, type, message) {
     var ip = request.connection.remoteAddress, method = request.method, type = type.charAt(0).toUpperCase();
     type = G_COLORS[type] ? ('[' + type + ']')[G_COLORS[type]] : '[' + type + ']';
     log([ip.cyan, type, method, (message || request.url)].join(' '));
+}
+
+// launch weinre.
+function launchWeinreServer(host, port) {
+
 }
 
 /**
@@ -700,6 +708,11 @@ if (!DEBUG) {
 }
 
 console.log('OPTIONS:'.green, argv);
+
+if (argv.weinre) {
+    // Launch weinre service.
+    launchWeinreServer();
+}
 
 // startup proxy server
 startup(require('./config'));
