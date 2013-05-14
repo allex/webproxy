@@ -3,3 +3,4 @@ conf.d/allow_ip_list
 conf.d/black_list
 conf.d/responder_list
 t.*
+*.dist.js

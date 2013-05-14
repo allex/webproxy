@@ -1,16 +1,8 @@
 /* vim:set ft=javascript: */
 {
-    // "m0.mail.sina.com.cn": {
-    //     "proxyto": "proxy:8888"
+    // "www.google.com": {
+    //     "redirect": "www.google.com.hk"
     // },
-    // "netdisk0.mail.sina.com.cn": {
-    //     "proxyto": "proxy:8888"
-    // },
-    "www.google.com": {
-        // "proxyto": "192.168.100.221:80"
-        // "redirect": "www.google.com.hk"
-        "proxyto": "proxy:8087"
-    },
     "www.google.com.hk": {
         "proxyto": "proxy:8087"
     },

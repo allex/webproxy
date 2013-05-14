@@ -124,12 +124,16 @@ function clone(o) {
     return newObj;
 }
 
-function extract(source, whitelist) {
+function parseArgs(params, source) {
     var o = {};
-    whitelist.forEach(function(prop, i) {
-        var k = prop[0], v = source[k];
-        o[k] = v === undefined ? prop[1] : v;
-    });
+    for (var k in source) {
+        if (hasProp(source, k)) {
+            o[k] = source[k];
+            if (params.hasOwnProperty(k)) {
+                o[k] = params[k];
+            }
+        }
+    }
     return o;
 }
 
@@ -165,7 +169,8 @@ function encode_host(host) {
 
 // pac functions {{{
 function dnsDomainIs(host, domain) {
-    return (host.length >= domain.length && host.substring(host.length - domain.length) === domain);
+    return (host.length >= domain.length &&
+        host.substring(host.length - domain.length) === domain);
 }
 function isPlainHostName(host) {
     return (host.search('\\.') === -1);
@@ -191,12 +196,17 @@ function isInNet(ipaddr, pattern, maskstr) {
 function localHostOrDomainIs(host, hostdom) {
     return (host == hostdom) || (hostdom.lastIndexOf(host + '.', 0) == 0);
 }
-function shExpMatch(url, pattern) {
-    pattern = pattern.replace(/\./g, '\\.');
-    pattern = pattern.replace(/\*/g, '.*');
-    pattern = pattern.replace(/\?/g, '.');
-    var regexp = new RegExp('^' + pattern + '$');
-    return regexp.test(url);
+function shExpMatch(text, exp) {
+    exp = exp.replace(/\.|\*|\?/g, function (m) {
+        if (m === '.') {
+            return '\\.';
+        } else if (m === '*') {
+            return '.*?'
+        } else if (m === '?') {
+            return '.';
+        }
+    });
+    return new RegExp(exp).test(text);
 }
 // }}}
 
@@ -277,43 +287,28 @@ function handle_proxy_rule(rule, target, token) {
     return target;
 }
 
-function findRoute(types) {
-    for (var mappings = hostfilters, i = -1, l = types.length, v; ++i < l; ) {
-        v = getOwn(mappings, types[i]);
-        if (v) return v;
-    }
-    return null;
-}
-
 function handle_proxy_route(host, url, token) {
     // extract target host and port
-    var conf = decode_host(host),
-        domain = conf.host,
-        port = conf.port,
-        rule,
-        mappings = hostfilters;
+    var ret = decode_host(host), rule, conf, mappings = hostfilters;
 
     // dnsDomainIs or shExpMatch
-    for (var key in mappings) {
-        if (hasProp(mappings, key)) {
-            var hostname = key.split(':')[0];
-            if (dnsDomainIs(host, hostname) || shExpMatch(url, key)) {
-                rule = mappings[key];
+    for (var expr in mappings) {
+        if (hasProp(mappings, expr)) {
+            var domain = expr.split(':')[0];
+            if (shExpMatch(url, expr) || dnsDomainIs(host, domain)) {
+                rule = mappings[expr];
                 break;
             }
         }
     }
 
-    if (!rule) {
-        rule = findRoute([host, domain, '*:' + port, '*']);
-    }
+    ret.action = 'proxyto';
 
-    conf.action = 'proxyto';
     if (rule) {
-        conf = handle_proxy_rule(rule, conf, token);
+        ret = handle_proxy_rule(rule, ret, token);
     }
 
-    return conf;
+    return ret;
 }
 
 function prevent_loop(request, response) {
@@ -556,16 +551,22 @@ function server_cb(request, response) {
 
     var conf = route_match(url);
     if (conf) {
-        // auto responder hosts.
         stdout(request, 'Location', url + ' -> ' + conf.dist);
+
+        // auto responder hosts.
         action_responder(conf, request, response);
     }
     else {
         // handle proxy action
         request = prevent_loop(request, response);
+
         if (request) {
-            var action = handle_proxy_route(request.headers.host, authenticate(request)), mode = action.action;
+            var action = handle_proxy_route(request.headers.host, url, authenticate(request));
+            var mode = action.action;
+
+            // log current network request.
             stdout(request, mode);
+
             if (mode == 'proxyto') {
                 action_proxy(response, request, action.host, action.port);
             }
@@ -598,36 +599,39 @@ function launchWeinreServer(host, port) {
 
 }
 
+function watchConfig(file, updater) {
+    fs.stat(file, function(err, stats) {
+        if (!err) {
+            updater(file);
+            fs.watchFile(file, function(c, p) { updater(file) });
+        } else {
+            if (argv.debug) error('File \'' + file + '\' was not found.');
+        }
+    });
+}
+
+// config files loaders/updaters
+function update_list(msg, file, lineParser, resultHandler) {
+    fs.stat(file, function(err, stats) {
+        if (!err) {
+            log(msg);
+            fs.readFile(file, function(err, data) {
+                resultHandler(data.toString().split('\n').filter(function(line) {
+                    return line.length && line.charAt(0) !== '#';
+                }).map(lineParser));
+            });
+        } else {
+            if (argv.debug) error('File \'' + file + '\' was not found.');
+            resultHandler([]);
+        }
+    });
+}
+
 /**
  * @param {Object} cfg The proxy configuration object.
  */
 function startup(options) {
-    function watchConfig(file, updater) {
-        fs.stat(file, function(err, stats) {
-            if (!err) {
-                updater(file);
-                fs.watchFile(file, function(c, p) { updater(file) });
-            } else {
-                DEBUG && error('File \'' + file + '\' was not found.');
-            }
-        });
-    }
-    // config files loaders/updaters
-    function update_list(msg, file, lineParser, resultHandler) {
-        fs.stat(file, function(err, stats) {
-            if (!err) {
-                log(msg);
-                fs.readFile(file, function(err, data) {
-                    resultHandler(data.toString().split('\n').filter(function(line) {
-                        return line.length && line.charAt(0) !== '#';
-                    }).map(lineParser));
-                });
-            } else {
-                DEBUG && error('File \'' + file + '\' was not found.');
-                resultHandler([]);
-            }
-        });
-    }
+    var proxyConfig = options.listen.http;
 
     // Initial config file watchers
     watchConfig(options.host_filters, function(file) {
@@ -638,21 +642,24 @@ function startup(options) {
                     hostfilters = JSON.parse(removeComments(data.toString()));
                 });
             } else {
-                DEBUG && error('File \'' + file + '\' was not found.');
+                if (argv.debug) error('File \'' + file + '\' was not found.');
                 hostfilters = {};
             }
         });
     });
+
     watchConfig(options.black_list, function(file) {
         update_list('Updating host black list.', file, function(rx) {
             return RegExp(rx);
         }, function(list) { blacklist = list; });
     });
+
     watchConfig(options.allow_ip_list, function(file) {
         update_list('Updating allowed ip list.', file, function(ip) {
             return ip;
         }, function(list) { iplist = list; });
     });
+
     watchConfig(options.responder_list, function(file) {
         update_list('Updating host routers.', file, function(line) {
             var type, src, pairs, role, dist, pos = line.indexOf(':');
@@ -681,23 +688,21 @@ function startup(options) {
         function(list) { responderlist = list; });
     });
 
-    // Crete HTTP proxy server
-    var p = options.listen.http;
-    http.createServer(server_cb).listen(p.port, p.host);
+    console.log('HTTP proxy server started' + ' on ' + (proxyConfig.host + ':' + proxyConfig.port).underline.yellow);
+    console.log('Options:'.green, argv);
 
-    console.log('HTTP proxy server started' + ' on ' + (p.host + ':' + p.port).underline.yellow);
+    // create HTTP proxy server
+    http.createServer(server_cb).listen(proxyConfig.port, proxyConfig.host);
 }
 
-var argv = extract(require('optimist').argv, [
-    ['debug'   , 0],
-    ['weinre'  , 0],
-    ['beautify', 0],
-    ['nocache' , 0]
-]);
+var argv = parseArgs(require('optimist').argv, {
+    'weinre'    : false,
+    'nocache'   : false,
+    'beautify'  : false,
+    'debug'     : false
+});
 
-var DEBUG = argv.debug;
-
-if (!DEBUG) {
+if (!argv.debug) {
     // last chance error handler
     // it catch the exception preventing the application from crashing.
     // I recommend to comment it in a development environment as it
@@ -707,7 +712,8 @@ if (!DEBUG) {
     });
 }
 
-console.log('OPTIONS:'.green, argv);
+// set process title.
+process.title = 'web-proxy-service';
 
 if (argv.weinre) {
     // Launch weinre service.
