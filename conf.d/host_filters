@@ -20,5 +20,8 @@
     },
     "*.blogspot.com/*": {
         "proxyto": "proxy:8087"
+    },
+    "facebook.com": {
+        "proxyto": "proxy:8087"
     }
 }

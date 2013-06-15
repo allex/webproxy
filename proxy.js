@@ -23,7 +23,7 @@ var http     = require('http'),
     mime     = require('mime'),
     request  = require('request'),
 
-    WritableBufferStream = require('buffertools').WritableBufferStream,
+    WritableStreamBuffer = require('stream-buffers').WritableStreamBuffer,
 
     blacklist     = [],
     iplist        = [],
@@ -432,29 +432,32 @@ function forwardResponse(request, sResponse, rResponse) {
         sResponse.on('end', function() { rResponse.end(); });
     }
     else {
-        var stream = new WritableBufferStream(),
-            gziped = isGzip(sResponse),
-            onEnd = function(buffer) {
-                buffer = processBuffer(buffer, extension);
-                if (gziped) {
-                    delete headers['content-encoding'];
-                }
-                headers['content-length'] = buffer.length; // cancel transfer encoding 'chunked'
-                rResponse.writeHead(sResponse.statusCode, headers);
-                rResponse.end(buffer, 'binary');
-            };
+        var stream = new WritableStreamBuffer({
+            initialSize: 100 * 1024
+        })
+        , gziped = isGzip(sResponse)
+        , onEnd = function(buffer) {
+            buffer = processBuffer(buffer, extension);
+            if (gziped) {
+                delete headers['content-encoding'];
+            }
+            headers['content-length'] = buffer.length; // cancel transfer encoding 'chunked'
+            rResponse.writeHead(sResponse.statusCode, headers);
+            rResponse.end(buffer, 'binary');
+            stream.destroy();
+            stream = null;
+        };
 
         sResponse.on('data', function(chunk) {
             stream.write(chunk);
         });
         sResponse.on('end', function() {
-            var buffer = stream.getBuffer();
+            var buffer = stream.getContents();
             if (gziped) {
                 // unGzip
-                zlib.gunzip(buffer, function(err, buffer) {
-                    onEnd(buffer);
-                });
-            } else {
+                zlib.gunzip(buffer, function(err, buffer) { onEnd(buffer); });
+            }
+            else {
                 onEnd(buffer);
             }
         });
