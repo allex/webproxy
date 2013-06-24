@@ -9,23 +9,13 @@
  *  beautify js code if needed (require beautify module).
  *  Fix request 302 redirect problem. see also https://github.com/mikeal/request/
  */
-
-var util = require('util');
-
-// internal log function
-function log(request, type, message) {
-    var url = message || request.url;
-    var conn = request.connection;
-    util.log(util.format('\033[36m%s:%s\033[39m %s "%s %s"', conn.remoteAddress, conn.remotePort, type, request.method, url));
-}
-
-function error(e) { util.puts((e && e.message || e || 'undefined').red); }
-function dump(s) { util.puts(JSON.stringify(s).green); }
-
 (function(require, exports, module) {
 'use strict';
 
-var http     = require('http'),
+var VERSION  = '1.2.2',
+
+    http     = require('http'),
+    util     = require('util'),
     fs       = require('fs'),
     url      = require('url'),
     colors   = require('colors'),
@@ -40,6 +30,19 @@ var http     = require('http'),
     responderlist = [],
     hostfilters   = {}
 ;
+
+var out = util.log;
+
+function info(msg) { out(msg.green); }
+function warn(msg) { out(msg.yellow); }
+function error(e) { var msg = e && e.message || e; msg && out(msg.red); }
+
+// internal log function
+function log(request, type, message) {
+    var url = message || request.url;
+    var conn = request.connection;
+    out(util.format('%s:%s'.cyan + ' %s'.magenta + ' "%s %s"', conn.remoteAddress, conn.remotePort, type, request.method, url));
+}
 
 // removing c-styled comments using javascript
 function removeComments(str) {
@@ -65,8 +68,8 @@ function isBinary(ext) {
     return !rPlainExt.test(ext);
 }
 
-function isGzip(response) {
-    return response.headers['content-encoding'] === 'gzip';
+function isGzip(res) {
+    return res.headers['content-encoding'] === 'gzip';
 }
 
 var rPattern = /\(([^)]*)\)/;
@@ -207,7 +210,7 @@ function shExpMatch(text, exp) {
         if (m === '.') {
             return '\\.';
         } else if (m === '*') {
-            return '.*?'
+            return '.*?';
         } else if (m === '?') {
             return '.';
         }
@@ -253,11 +256,11 @@ function host_allowed(host) {
 
 // header decoding
 function authenticate(request) {
-    var token = {'login': 'anonymous', 'pass': ''}, basic;
-    if (request.headers.authorization && request.headers.authorization.search('Basic ') === 0) {
+    var token = {'login': 'anonymous', 'pass': ''}, basic, headers = request.headers;
+    if (headers.authorization && headers.authorization.search('Basic ') === 0) {
         // fetch login and password
-        basic = (new Buffer(request.headers.authorization.split(' ')[1], 'base64').toString());
-        console.log('Authentication token received: ' + basic);
+        basic = (new Buffer(headers.authorization.split(' ')[1], 'base64').toString());
+        info('Authentication token received: ' + basic);
         basic = basic.split(':');
         token.login = basic[0];
         token.pass = basic[1]; // fixme: potential trouble if there is a ':' in the pass
@@ -295,7 +298,7 @@ function handle_proxy_rule(rule, target, token) {
 
 function handle_proxy_route(host, url, token) {
     // extract target host and port
-    var ret = decode_host(host), rule, conf, mappings = hostfilters;
+    var ret = decode_host(host), rule, mappings = hostfilters;
 
     // dnsDomainIs or shExpMatch
     for (var expr in mappings) {
@@ -318,7 +321,8 @@ function handle_proxy_route(host, url, token) {
 }
 
 function prevent_loop(request, response) {
-    if (request.headers.proxy === 'node.jtlebi') { // if request is already tooted => loop
+    var headers = request.headers;
+    if (headers.proxy === 'allex.proxy') { // if request is already tooted => loop
         error('Loop detected');
         response.writeHead(500);
         response.write('Proxy loop !');
@@ -326,7 +330,7 @@ function prevent_loop(request, response) {
         return false;
     } else {
         // append a tattoo to prevent dead proxies.
-        request.headers.proxy = 'node.jtlebi';
+        headers.proxy = 'allex.proxy';
         return request;
     }
 }
@@ -356,7 +360,7 @@ function action_notfound(response, msg) {
 }
 
 function action_redirect(response, host) {
-    console.log('Redirecting to ' + host);
+    info('Redirecting to ' + host);
     if (!/^https?:\/\//i.test(host)) {
         host = 'http://' + host;
     }
@@ -507,7 +511,7 @@ function action_proxy(response, request, host, port) {
     // optional set proxy server
     var proxy = options.hostname !== host;
     if (proxy) {
-        console.log('Proxy: ' + 'http://' + host + ':' + port);
+        info('Proxy: ' + 'http://' + host + ':' + port);
         options.host = host;
         options.port = port;
         options.path = reqUrl;
@@ -524,7 +528,7 @@ function action_proxy(response, request, host, port) {
 // special security logging function
 function security_log(request, response, msg) {
     var ip = request.connection.remoteAddress;
-    console.log('**SECURITY VIOLATION**, ' + ip + ',' + request.method || '' + ' ' + request.url || '' + ',' + msg);
+    info('**SECURITY VIOLATION**, ' + ip + ',' + request.method || '' + ' ' + request.url || '' + ',' + msg);
 }
 
 // security filter
@@ -558,20 +562,18 @@ function server_cb(request, response) {
         return;
     }
 
+    response.setHeader('X-Powered-By', util.format('web-proxy-service %s', VERSION));
+
     var conf = route_match(url);
     if (conf) {
-        log(request, 'Location', url + ' -> ' + conf.dist);
-
         // auto responder hosts.
+        log(request, 'local'.green, url + ' -> ' + conf.dist);
         action_responder(conf, request, response);
     }
     else {
-        // handle proxy action
-        request = prevent_loop(request, response);
-
-        if (request) {
-            var action = handle_proxy_route(request.headers.host, url, authenticate(request));
-            var mode = action.action;
+        // handle proxy actions.
+        if (request = prevent_loop(request, response)) {
+            var action = handle_proxy_route(request.headers.host, url, authenticate(request)), mode = action.action;
 
             // log current network request.
             log(request, mode);
@@ -598,7 +600,7 @@ function watchConfig(file, updater) {
     fs.stat(file, function(err, stats) {
         if (!err) {
             updater(file);
-            fs.watchFile(file, function(c, p) { updater(file) });
+            fs.watchFile(file, function(c, p) { updater(file); });
         } else {
             if (argv.debug) error('File \'' + file + '\' was not found.');
         }
@@ -609,14 +611,14 @@ function watchConfig(file, updater) {
 function update_list(msg, file, lineParser, resultHandler) {
     fs.stat(file, function(err, stats) {
         if (!err) {
-            console.log(msg);
+            info(msg);
             fs.readFile(file, function(err, data) {
                 resultHandler(data.toString().split('\n').filter(function(line) {
                     return line.length && line.charAt(0) !== '#';
                 }).map(lineParser));
             });
         } else {
-            if (argv.debug) error('File \'' + file + '\' was not found.');
+            if (argv.debug) warn('File \'' + file + '\' was not found.');
             resultHandler([]);
         }
     });
@@ -632,31 +634,31 @@ function startup(options) {
     watchConfig(options.host_filters, function(file) {
         fs.stat(file, function(err, stats) {
             if (!err) {
-                console.log('Updating host filter');
+                info('host filter updated.');
                 fs.readFile(file, function(err, data) {
                     hostfilters = JSON.parse(removeComments(data.toString()));
                 });
             } else {
-                if (argv.debug) error('File \'' + file + '\' was not found.');
+                if (argv.debug) warn('File \'' + file + '\' was not found.');
                 hostfilters = {};
             }
         });
     });
 
     watchConfig(options.black_list, function(file) {
-        update_list('Updating host black list.', file, function(rx) {
+        update_list('host black list updated.', file, function(rx) {
             return RegExp(rx);
         }, function(list) { blacklist = list; });
     });
 
     watchConfig(options.allow_ip_list, function(file) {
-        update_list('Updating allowed ip list.', file, function(ip) {
+        update_list('white ip list updated.', file, function(ip) {
             return ip;
         }, function(list) { iplist = list; });
     });
 
     watchConfig(options.responder_list, function(file) {
-        update_list('Updating host routers.', file, function(line) {
+        update_list('host routers updated.', file, function(line) {
             var type, src, pairs, role, dist, pos = line.indexOf(':');
             if (pos !== -1) {
                 type = line.substring(0, pos);
