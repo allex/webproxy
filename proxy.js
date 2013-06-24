@@ -10,12 +10,22 @@
  *  Fix request 302 redirect problem. see also https://github.com/mikeal/request/
  */
 
-'use strict';
+var util = require('util');
+
+// internal log function
+function log(request, type, message) {
+    var url = message || request.url;
+    var conn = request.connection;
+    util.log(util.format('\033[36m%s:%s\033[39m %s "%s %s"', conn.remoteAddress, conn.remotePort, type, request.method, url));
+}
+
+function error(e) { util.puts((e && e.message || e || 'undefined').red); }
+function dump(s) { util.puts(JSON.stringify(s).green); }
 
 (function(require, exports, module) {
+'use strict';
 
 var http     = require('http'),
-    util     = require('util'),
     fs       = require('fs'),
     url      = require('url'),
     colors   = require('colors'),
@@ -30,10 +40,6 @@ var http     = require('http'),
     responderlist = [],
     hostfilters   = {}
 ;
-
-function log(s) { util.log(s); }
-function error(e) { util.puts((e && e.message || e || 'undefined').red); }
-function dump(s) { util.puts(JSON.stringify(s).green); }
 
 // removing c-styled comments using javascript
 function removeComments(str) {
@@ -251,7 +257,7 @@ function authenticate(request) {
     if (request.headers.authorization && request.headers.authorization.search('Basic ') === 0) {
         // fetch login and password
         basic = (new Buffer(request.headers.authorization.split(' ')[1], 'base64').toString());
-        log('Authentication token received: ' + basic);
+        console.log('Authentication token received: ' + basic);
         basic = basic.split(':');
         token.login = basic[0];
         token.pass = basic[1]; // fixme: potential trouble if there is a ':' in the pass
@@ -350,7 +356,7 @@ function action_notfound(response, msg) {
 }
 
 function action_redirect(response, host) {
-    log('Redirecting to ' + host);
+    console.log('Redirecting to ' + host);
     if (!/^https?:\/\//i.test(host)) {
         host = 'http://' + host;
     }
@@ -501,7 +507,7 @@ function action_proxy(response, request, host, port) {
     // optional set proxy server
     var proxy = options.hostname !== host;
     if (proxy) {
-        log('Proxy: ' + 'http://' + host + ':' + port);
+        console.log('Proxy: ' + 'http://' + host + ':' + port);
         options.host = host;
         options.port = port;
         options.path = reqUrl;
@@ -518,7 +524,7 @@ function action_proxy(response, request, host, port) {
 // special security logging function
 function security_log(request, response, msg) {
     var ip = request.connection.remoteAddress;
-    log('**SECURITY VIOLATION**, ' + ip + ',' + request.method || '' + ' ' + request.url || '' + ',' + msg);
+    console.log('**SECURITY VIOLATION**, ' + ip + ',' + request.method || '' + ' ' + request.url || '' + ',' + msg);
 }
 
 // security filter
@@ -554,7 +560,7 @@ function server_cb(request, response) {
 
     var conf = route_match(url);
     if (conf) {
-        stdout(request, 'Location', url + ' -> ' + conf.dist);
+        log(request, 'Location', url + ' -> ' + conf.dist);
 
         // auto responder hosts.
         action_responder(conf, request, response);
@@ -568,7 +574,7 @@ function server_cb(request, response) {
             var mode = action.action;
 
             // log current network request.
-            stdout(request, mode);
+            log(request, mode);
 
             if (mode == 'proxyto') {
                 action_proxy(response, request, action.host, action.port);
@@ -581,20 +587,6 @@ function server_cb(request, response) {
             }
         }
     }
-}
-
-var G_COLORS = {
-    'L': 'magenta', // location
-    'R': 'red',     // redirect
-    'P': 'green',   // proxy
-    'A': 'white'    // authenticate
-};
-
-// console log message to stdout
-function stdout(request, type, message) {
-    var ip = request.connection.remoteAddress, method = request.method, type = type.charAt(0).toUpperCase();
-    type = G_COLORS[type] ? ('[' + type + ']')[G_COLORS[type]] : '[' + type + ']';
-    log([ip.cyan, type, method, (message || request.url)].join(' '));
 }
 
 // launch weinre.
@@ -617,7 +609,7 @@ function watchConfig(file, updater) {
 function update_list(msg, file, lineParser, resultHandler) {
     fs.stat(file, function(err, stats) {
         if (!err) {
-            log(msg);
+            console.log(msg);
             fs.readFile(file, function(err, data) {
                 resultHandler(data.toString().split('\n').filter(function(line) {
                     return line.length && line.charAt(0) !== '#';
@@ -640,7 +632,7 @@ function startup(options) {
     watchConfig(options.host_filters, function(file) {
         fs.stat(file, function(err, stats) {
             if (!err) {
-                log('Updating host filter');
+                console.log('Updating host filter');
                 fs.readFile(file, function(err, data) {
                     hostfilters = JSON.parse(removeComments(data.toString()));
                 });
