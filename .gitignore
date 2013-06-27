@@ -1,6 +1,4 @@
 node_modules
-conf.d/allow_ip_list
-conf.d/black_list
-conf.d/responder_list
+conf.d/*
 t.*
 *.dist.js

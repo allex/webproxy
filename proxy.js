@@ -39,9 +39,9 @@ function error(e) { var msg = e && e.message || e; msg && out(msg.red); }
 
 // internal log function
 function log(request, type, message) {
-    var url = message || request.url;
     var conn = request.connection;
-    out(util.format('%s:%s'.cyan + ' %s'.magenta + ' "%s %s"', conn.remoteAddress, conn.remotePort, type, request.method, url));
+    message = message || request.url;
+    out(util.format('%s:%s '.cyan + '"%s %s %s"', conn.remoteAddress, conn.remotePort, type, request.method, message));
 }
 
 // removing c-styled comments using javascript
@@ -276,7 +276,7 @@ function handle_proxy_rule(rule, target, token) {
     // handle authorization
     if ('validuser' in rule) {
         if (!(token.login in rule.validuser) || (rule.validuser[token.login] != token.pass)) {
-            target.action = 'authenticate';
+            target.action = 'AUTHENTICATE';
             target.msg = rule.description || '';
             return target;
         }
@@ -285,11 +285,11 @@ function handle_proxy_rule(rule, target, token) {
     // handle real actions
     if ('redirect' in rule) {
         target = decode_host(rule.redirect);
-        target.action = 'redirect';
+        target.action = 'REDIRECT';
     } else {
         if ('proxyto' in rule) {
             target = decode_host(rule.proxyto);
-            target.action = 'proxyto';
+            target.action = 'PROXYTO';
         }
     }
 
@@ -311,7 +311,7 @@ function handle_proxy_route(host, url, token) {
         }
     }
 
-    ret.action = 'proxyto';
+    ret.action = 'PROXYTO';
 
     if (rule) {
         ret = handle_proxy_rule(rule, ret, token);
@@ -511,7 +511,7 @@ function action_proxy(response, request, host, port) {
     // optional set proxy server
     var proxy = options.hostname !== host;
     if (proxy) {
-        info('Proxy: ' + 'http://' + host + ':' + port);
+        log(request, 'PROXYTO'.red, util.format('proxy by http://%s:%s', host, port));
         options.host = host;
         options.port = port;
         options.path = reqUrl;
@@ -519,6 +519,7 @@ function action_proxy(response, request, host, port) {
     }
 
     var x = sendRequest(options, request, response);
+
     // deal with errors, timeout, con refused, ...
     x.on('error', function(err) {
         action_notfound(response, 'Requested resource (' + reqUrl + ') is not accessible on host "' + host + ':' + port + '"');
@@ -567,7 +568,7 @@ function server_cb(request, response) {
     var conf = route_match(url);
     if (conf) {
         // auto responder hosts.
-        log(request, 'local'.green, url + ' -> ' + conf.dist);
+        log(request, 'FORWARD'.magenta, url + ' -> ' + conf.dist);
         action_responder(conf, request, response);
     }
     else {
@@ -575,16 +576,16 @@ function server_cb(request, response) {
         if (request = prevent_loop(request, response)) {
             var action = handle_proxy_route(request.headers.host, url, authenticate(request)), mode = action.action;
 
-            // log current network request.
-            log(request, mode);
+            // log request info.
+            log(request, mode.grey);
 
-            if (mode == 'proxyto') {
+            if (mode === 'PROXYTO') {
                 action_proxy(response, request, action.host, action.port);
             }
-            else if (mode == 'redirect') {
+            else if (mode === 'REDIRECT') {
                 action_redirect(response, encode_host(action));
             }
-            else if (mode == 'authenticate') {
+            else if (mode === 'AUTHENTICATE') {
                 action_authenticate(response, action.msg);
             }
         }
