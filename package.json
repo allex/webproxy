@@ -1,7 +1,7 @@
 {
   "name": "webproxy",
   "description": "A HTTP(S) reverse proxy server written in node. with features for web develop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "author": {
     "name": "Allex Wang",
     "email": "allex.wxn@gmail.com"
@@ -16,10 +16,13 @@
   "engines": [
     "node >= 0.3.6"
   ],
-  "main": "./index.js",
+  "main": "./lib/proxy",
   "dependencies": {
     "stream-buffers": ">=0.2.4",
-    "mime": "1.2.x"
+    "mime": "latest",
+    "request": "latest",
+    "socks5-https-client": "latest",
+    "socks5-http-client": "latest"
   },
   "readmeFilename": "README.md"
 }

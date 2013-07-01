@@ -1,0 +1,17 @@
+{
+    "*.blogspot.com/*": {
+        "proxy": "http://proxy:8087"
+    },
+    ".youtube.com": {
+        "proxy": "socks5://127.0.0.1:7070"
+    },
+    "ajax.googleapis.com": {
+        "proxy": "socks5://127.0.0.1:7070"
+    },
+    "*.google.com": {
+        "proxy": "socks5://127.0.0.1:7070"
+    },
+    "*.gravatar.com": {
+        "proxy": "socks5://127.0.0.1:7070"
+    }
+}

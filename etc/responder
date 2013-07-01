@@ -1,0 +1,65 @@
+# set ft=conf tw=200
+
+# ============================================
+# AutoResponder Configration
+# prefix (regex/wildcard/exact)
+# @author: Allex Wang (allex.wxn@gmail.com)
+# ============================================
+
+# =========
+# web debug
+# =========
+
+# =========
+# padmail
+# =========
+#
+# wildcard:(*)/rny/padmail/css/(*)    /var/padmail/assets/css/$2
+# wildcard:(*)/padmail/images/(*)     /var/padmail/assets/images/$2
+# wildcard:(*)/rny/padmail/images/(*) /var/padmail/assets/images/$2
+
+# wildcard:(*)/rny/padmail/js/(*)                 http://m.sinaimg.cn/rny/padmail/js/$2
+# wildcard:(*).sina.com.cn/m/index.php(*)         http://m.sinaimg.cn/login_pad.php$2
+# wildcard:(*).sina.com.cn/m/index_smart.php(*)   http://m.sinaimg.cn/login_smart.php$2
+
+# wildcard:(*)/(mobile|pad)/offline.manifest(*)   http://m.sinaimg.cn/offline.manifest$3
+# wildcard:(*)mail.sina.com.cn/(pad)/index.php?(*)debug(*) http://m.sinaimg.cn/index.php?$3$4
+# wildcard:(*)mail.sina.com.cn/(mobile)/index.php?(*)debug(*) http://m.sinaimg.cn/index.php?dist
+
+# wildcard:(*)/zepto.js(*) http://zeptojs.com/zepto.js
+
+# =========
+# test
+# =========
+
+# wildcard:(*)/sea.js http://local/dev/vendor/more/amd/seajs/dist/sea-debug.js
+wildcard:(*)http://yui.yahooapis.com/(*)-min.js(*) http://yui.yahooapis.com/$2.js
+
+# qzone infocenter
+# wildcard:http://cnc.qzonestyle.gtimg.cn/qzone/photo/v7/js/common/viewer/icenter_popup.js  /home/allex/tmp/icenter_popup.js
+# wildcard:http://cnc.qzonestyle.gtimg.cn/qzone/v6/interface/interface_v6_20130514.js /home/allex/tmp/interface_v6_20130514.js
+# wildcard:http://cnc.qzonestyle.gtimg.cn/c/=/qzone/v6/newic/ic_config.js,/qzone/v6/newic/ic_lazy_loader.js,/qzone/v6/newic/ic_controller_delay.js,/qzone/v6/newic/ic_core_v3.0.js,/qzone/v6/newic/ic_extend_v3.0.js,/qzone/v6/newic/ic_controller.js,/qzone/v6/newic/ic_feed_tip.js,/qzone/v6/newic/ic_original_broadcaster.js,/qzone/v6/newic/ic_doingfeeds.js,/qzone/v6/newic/ic_feeds_monitor.js,/qzone/v6/newic/ic_trigger_v3.0.js,/qzone/v6/newic/ic_feeds_protocol.js /home/allex/tmp/ic_.js
+# wildcard:http://cnc.qzs.qq.com/qzone/photo/zone/script/newSlideView.js /home/allex/tmp/newSlideView.js
+# wildcard:http://cnc.qzonestyle.gtimg.cn/qzone/photo/v7/js/common/viewer2/index.js /home/allex/tmp/viewer2.js
+# wildcard:http://mat1.gtimg.com/www/mb/js/c/player/mi.cSlide.player_130418m.js /home/allex/tmp/mi.cSlide.player_130418m.js
+
+# =========
+# weibo.com
+# =========
+
+# wildcard:(*)/theia.js /home/allex/dev/weibo/stk/theia.js
+# wildcard:(*)http://(sun1|wjq12).weibo.com/aj/photo/popview?(*) /home/allex/tmp/popview_piclist.json
+# wildcard:(*)http://img.t.sinajs.cn/t5/style/css/(*) http://10.210.210.173:8080/miniblog5/css/$2
+
+# wildcard:http://www.facebook.com/kinaschens /home/allex/a.html
+
+# wildcard:http://tjs.sjs.sinajs.cn/open/api/js/wb.js /home/allex/tmp/wb.js
+# wildcard:http://js.t.sinajs.cn/open/api/js/api/client.js /home/allex/tmp/wb_client.js
+
+# =========
+# BBG
+# =========
+exact:http://bmms.bubugao-inc.com/Temp/vis?dir=topic&file=ymoon.html /Users/allex/tmp/proxy.tmp/ymoon.html
+wildcard:http://bmms.bubugao-inc.com/assets/dx/(*) /Users/allex/dev/bbg/web/bmms-bubugao-inc-com/assets/dx/$1
+wildcard:http://bmms.bubugao-inc.com/js/(*) /Users/allex/dev/bbg/web/bmms-bubugao-inc-com/js/$1
+# wildcard:http://bmms.bubugao-inc.com/Productdialog/index(*) /Users/allex/tmp/proxy.tmp/15793.html
