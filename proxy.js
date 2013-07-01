@@ -286,7 +286,8 @@ function handle_proxy_rule(rule, target, token) {
     if ('redirect' in rule) {
         target = decode_host(rule.redirect);
         target.action = 'REDIRECT';
-    } else {
+    }
+    else {
         if ('proxyto' in rule) {
             target = decode_host(rule.proxyto);
             target.action = 'PROXYTO';
@@ -310,7 +311,6 @@ function handle_proxy_route(host, url, token) {
             }
         }
     }
-
     ret.action = 'PROXYTO';
 
     if (rule) {
@@ -574,7 +574,7 @@ function server_cb(request, response) {
     else {
         // handle proxy actions.
         if (request = prevent_loop(request, response)) {
-            var action = handle_proxy_route(request.headers.host, url, authenticate(request)), mode = action.action;
+            var action = handle_proxy_route(request.headers.host, url, authenticate(request)), mode = action.action.toUpperCase();
 
             // log request info.
             log(request, mode.grey);
