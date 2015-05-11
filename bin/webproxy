@@ -4,7 +4,6 @@ var util = require('util')
   , config = require('../config')
   , proxy = require('../')
 
-// startup proxy server
 if (config.debug) {
   // output memory usage info every 5 minutes
   var min = 0, last = 0, interval = .1 * 60 * 1000
@@ -20,6 +19,7 @@ if (config.debug) {
   })
 }
 
+// startup proxy server
 proxy()
 
 // vim: set ft=javascript fdm=marker ts=2 sw=2 sts=2 tw=85 et :
