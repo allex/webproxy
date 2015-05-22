@@ -20,9 +20,12 @@
   "dependencies": {
     "stream-buffers": ">=0.2.4",
     "mime": "latest",
-    "request": "latest",
     "socks5-https-client": "latest",
-    "socks5-http-client": "latest"
+    "socks5-http-client": "latest",
+    "colors": "*",
+    "fs-x": "latest",
+    "optimist": "0.6.1",
+    "lang-ext": "1.0.6"
   },
   "readmeFilename": "README.md"
 }

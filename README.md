@@ -1,26 +1,64 @@
-## HTTP(s) proxy
-================
+HTTP(s) Proxy
+=============
 
 <pre>
 A HTTP(S) reverse proxy server written in node. with features for web develop.
-Based on the Nodejs-proxy INITIAL commits written by Peteris Krumins (peter@catonmat.net).
-
 Author: Allex Wang (allex.wxn@gmail.com)
 </pre>
 
 ## Features:
-* http(s) request forwarding.
-* weinre debugger. (need weinre installed)
-* javascript code beautify for codes online.
-* host simulation by some configuration proxy forwardings.
 
-## Proxy setup
-<pre>
+* Host simulation by some configuration proxy forwardings.
+* Http(s) request forwarding, support proxy forwardings (http, socks)
+* Add remote address to response headers `X-Remote-Address`.
+* Javascript code beautify for codes online.
+
+## Proxy Setup
+
+```sh
 cd ~/local/
 git clone git://github.com/allex/webproxy.git webproxy
 node ./webproxy/proxy.js [--weinre | --beautify | --nocache | --debug]
-</pre>
+```
+
+## Configuration
+
+### host (support third-party proxies forwardings)
+
+cat ~/.proxy2/rules/hosts
+
+```json
+{
+    "*.twitter.com": {
+        "hosts": "199.16.158.168"
+    },
+    "*.blogspot.com/*": {
+        "proxy": "http://proxy:8087"
+    },
+    ".youtube.com": {
+        "proxy": "socks5://127.0.0.1:7070"
+    },
+    "*.gravatar.com": {
+        "proxy": "socks5://127.0.0.1:7070"
+    }
+}
+```
+
+### responder
+
+cat ~/.proxy2/rules/responder
+
+```ini
+# exact pattern
+exact:http://iallex.com/ /Users/allex/iallex.com/index.html
+
+# wildcard pattern
+wildcard:(*)/theia.js /Users/allex/dev/weibo/stk/theia.js
+
+# replace pattern
+wildcard:(*)/foo/images/(*) /var/www/foo/assets/images/$2
+```
 
 ## TODO:
-* Supports HTTPS forwarding.
+
 * Publish to npm, for easy installer.
