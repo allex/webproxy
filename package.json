@@ -17,6 +17,9 @@
     "node >= 0.3.6"
   ],
   "main": "./lib/proxy",
+  "bin": {
+    "webproxy": "./bin/webproxy"
+  },
   "dependencies": {
     "stream-buffers": ">=0.2.4",
     "mime": "latest",
